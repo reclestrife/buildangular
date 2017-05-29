@@ -41,4 +41,47 @@ describe('injector', function() {
         expect(injector.get('constant1')).toBe(1);
     });
 
+    it('can invoke an annotated function with dependency injection', function() {
+        var module = window.angular.module('myModule', []);
+        module.constant('a', 20);
+        module.constant('b', 21);
+        var injector = createInjector(['myModule']);
+        var fn = function(a, b) {
+            return a + b;
+        };
+        fn.$inject = ['a', 'b'];
+        expect(injector.invoke(fn)).toBe(41);
+    });
+
+    it('can invoke an annotated function with given context', function() {
+        var module = window.angular.module('myModule', []);
+        module.constant('a', 20);
+        module.constant('b', 21);
+        var injector = createInjector(['myModule']);
+
+        var obj = { c: 10 };
+        var fn = function(a, b) {
+            return a + b + this.c;
+        };
+        fn.$inject = ['a', 'b'];
+        expect(injector.invoke(fn, obj)).toBe(51);
+    });
+
+    it('can instantiate an object with dependency injection', function() {
+        var module = window.angular.module('myModule', []);
+        module.constant('a', 1);
+        module.constant('b', 3);
+
+        var injector = createInjector(['myModule']);
+        function Type(a, b) {
+            this.value = a + b;
+        }
+        Type.$inject = ['a', 'b'];
+
+        var instant = injector.instantiate(Type);
+        expect(instant.value).toBe(4);
+    });
+
 });
+
+

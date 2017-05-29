@@ -19,6 +19,19 @@
             });
         };
 
+        function invoke(fn, self) {
+            var args = _.map(fn.$inject, function(key) {
+                return cache[key];
+            });
+            return fn.apply(self, args);
+        }
+
+        function instantiate(Type) {
+            var instant = Object.create(Type.prototype);
+            invoke(Type, instant);
+            return instant;
+        }
+
         _.forEach(modulesToLoad, function(moduleName) {
             var module = window.angular.module(moduleName);
             if (module.requires && module.requires.length > 0) {
@@ -36,7 +49,9 @@
             },
             get: function(key) {
                 return cache[key];
-            }
+            },
+            invoke: invoke,
+            instantiate: instantiate
         };
     };
 
