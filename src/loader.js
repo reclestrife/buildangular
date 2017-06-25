@@ -17,16 +17,27 @@
         //     console.log(modules);
         // }
 
+        
+
 
         var createModule = function(name, requires) {
             var invokeQueue = [];
+            var configBlocks = [];
+            var invokeLater = function(service, method, arrayMethod, queue) {
+                return function() {
+                    var item = [service, method, arguments];
+                    queue = queue || invokeQueue;
+                    queue[arrayMethod || 'push'](item);
+                };
+            };
             var moduleInstance = {
                 name: name,
                 requires: requires,
-                constant: function(key, value) {
-                    invokeQueue.push(['constant', [key, value]]);
-                },
-                _invokeQueue: invokeQueue
+                constant: invokeLater('$provide', 'constant', 'unshift'),
+                provider: invokeLater('$provide', 'provider'),
+                config: invokeLater('$injector', 'invoke', 'push', configBlocks),
+                _invokeQueue: invokeQueue,
+                _configBlocks: configBlocks
             };
             modules[name] = moduleInstance;
             return moduleInstance;

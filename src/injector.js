@@ -4,55 +4,100 @@
     
     window.createInjector = function(modulesToLoad) {
 
-        var cache = {};
-        var $provide = {
-            'constant': function(key, value) {
-                cache[key] = value;
-            }
-        };
-
-        var createInternalInjector = function(module) {
-            _.forEach(module._invokeQueue, function(invokeArgs) {
-                var method = invokeArgs[0];
-                var args = invokeArgs[1];
-                $provide[method].apply($provide, args);
-            });
-        };
-
-        function invoke(fn, self) {
-            var args = _.map(fn.$inject, function(key) {
-                return cache[key];
-            });
-            return fn.apply(self, args);
-        }
-
-        function instantiate(Type) {
-            var instant = Object.create(Type.prototype);
-            invoke(Type, instant);
-            return instant;
-        }
-
-        _.forEach(modulesToLoad, function(moduleName) {
-            var module = window.angular.module(moduleName);
-            if (module.requires && module.requires.length > 0) {
-                _.forEach(module.requires, function(requiredName) {
-                    var requiredModule = window.angular.module(requiredName);
-                    createInternalInjector(requiredModule);
-                });
-            }
-            createInternalInjector(module);
+        var providerCache = {};
+        var providerInjector = providerCache.$injector = createInternalInjector(providerCache, function() {
+            throw 'Unknown provider';
         });
 
-        return {
-            has: function(key) {
-                return cache.hasOwnProperty(key);
+        var instanceCache = {};
+        var instanceInjector = instanceCache.$injector = createInternalInjector(instanceCache, function(key) {
+            var provider = providerInjector.get(key + 'Provider');
+            return instanceInjector.invoke(provider.$get, provider);
+        });
+
+        providerCache.$provide = {
+            'constant': function(key, value) {
+                instanceCache[key] = value;
+                providerCache[key] = value;
             },
-            get: function(key) {
-                return cache[key];
-            },
-            invoke: invoke,
-            instantiate: instantiate
+            'provider': function(key, provider) {
+                if (_.isFunction(provider)) {
+                    provider = providerInjector.instantiate(provider);
+                }
+                providerCache[key + 'Provider'] = provider;
+            }
         };
+
+        function createInternalInjector(cache, factoryFn) {
+
+            function getService(key) {
+                if (cache.hasOwnProperty(key)) {
+                    return cache[key];
+                }
+                else {
+                    return (cache[key] = factoryFn(key));
+                }
+            }
+
+            function has(key) {
+                return cache.hasOwnProperty(key) || 
+                    providerCache.hasOwnProperty(key + 'Provider');
+            }
+
+            // function get(key) {
+            //     if (instanceCache.hasOwnProperty(key)) {
+            //         return instanceCache[key];
+            //     }
+            //     else if (providerCache.hasOwnProperty(key)) {
+            //         return providerCache[key];
+            //     }
+            //     else if (providerCache.hasOwnProperty(key + 'Provider')) {
+            //         var provider = providerCache[key + 'Provider'];
+            //         var instance = instanceCache[key] = invoke(provider.$get, provider);
+            //         return instance;
+            //     }
+            // }
+
+            function invoke(fn, self) {
+                var args = _.map(fn.$inject, function(key) {
+                    return getService(key);
+                });
+                return fn.apply(self, args);
+            }
+
+            function instantiate(Type) {
+                var instant = Object.create(Type.prototype);
+                invoke(Type, instant);
+                return instant;
+            }
+
+            return {
+                has: has,
+                get: getService,
+                invoke: invoke,
+                instantiate: instantiate
+            };
+        }
+
+        function runInvokeQueue(queue) {
+            _.forEach(queue, function(invokeArgs) {
+                var service = providerInjector.get(invokeArgs[0]);
+                var method = invokeArgs[1];
+                var args = invokeArgs[2];
+                service[method].apply(service, args);
+            });
+        }
+
+        _.forEach(modulesToLoad, function loadModule(moduleName) {
+            var module = window.angular.module(moduleName);
+            _.forEach(module.requires, loadModule);
+            runInvokeQueue(module._invokeQueue);
+            runInvokeQueue(module._configBlocks);
+        });
+
+        return instanceInjector;
+
+        
     };
 
 })();
